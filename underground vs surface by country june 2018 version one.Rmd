@@ -1,0 +1,205 @@
+---
+title: "Underground vs surface by country"
+
+---
+
+Looking at June 2018 Mining Intelligence data.
+
+ 
+
+```{r}
+library(tidyverse)
+
+rawpropaddress <- read_csv("C:/Users/mmccrae/Desktop/property addresses format r june 18 2018.csv")
+View(rawpropaddress)
+
+rawprocess <- read_csv("C:/Users/mmccrae/Desktop/processing r format june 18 2018.csv")
+View(rawprocess)
+
+overviewraw <- read_csv("C:/Users/mmccrae/Desktop/overview r format june 2018.csv")
+View(overviewraw)
+
+glimpse(rawpropaddress)
+glimpse(rawprocess)
+glimpse(overviewraw)
+
+
+```
+
+
+
+K. Let's join two data sets. Just join overviewraw and rawprocess since the other dataset appears to be broken. 
+
+
+
+```{r}
+
+joinraw <- full_join(rawprocess,overviewraw)
+View(joinraw)
+```
+
+
+What country has the most operating mines? 
+
+```{r}
+
+mostmines <- joinraw %>% filter(AssetType=="Mine") %>% filter(ActivityStatus=="Production") %>% filter(WorkType %in% c("Open-Pit", "Underground")) %>% group_by(Country) %>% tally(sort=TRUE) %>% top_n(20)
+mostmines
+```
+
+
+
+Let's chart. 
+
+
+```{r}
+
+
+
+library(scales)
+library(showtext)
+library(extrafont)
+
+
+mm <- ggplot(mostmines, aes(x=reorder(Country,n), y=n))+
+  geom_bar(stat="identity",width=.1, fill="#918f8f")+
+  geom_point(size=6, color="#918f8f")+
+  geom_text(aes(label=n), hjust = -.9, family="Montserrat")+
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 1000), labels = scales::comma) +
+  theme_minimal(base_size=16, base_family="Montserrat")+
+  labs(title="Number of Mines in Production by Country", subtitle="Mines classified as underground or open pit as of June 2018. Showing just the top 20 countries.",x="", y="", caption="Mining Intelligence", fill="") +
+  theme(plot.title = element_text(size = rel(2), family="Zilla Slab Light"), legend.title=element_blank()) +
+  scale_colour_manual(values=c("#99d594","#fc8d59"))
+#  theme(legend.position="none")
+
+mm
+
+
+  ggsave("minesbycountry4.pdf", plot=mm, width=280, height=210, units="mm")
+  
+```
+
+
+
+
+
+Let's look at top 20 country with underground and surface. 
+
+
+
+
+```{r}
+
+#undersurf <- joinraw %>% filter(Country %in% c("United States","Russia","Australia","China","India","South Africa","Canada","Ukraine","Brazil","Mexico","Indonesia","Peru","Kazakhstan","Chile","Zimbabwe","Poland","Vietnam","Turkey","Dem. Republic of the Congo","Philippines")) %>% filter(ActivityStatus=="Production") %>% filter(WorkType %in% c("Open-Pit", "Underground")) %>% group_by(Country, WorkType) %>% tally(sort=TRUE) %>% ungroup() %>% group_by(Country) %>% tally() %>% ungroup()
+
+undersurf <- joinraw %>% filter(Country %in% c("United States","Russia","Australia","India","China","South Africa","Ukraine","Canada","Brazil","Mexico","Indonesia","Peru","Chile","Kazakhstan","Zimbabwe","Poland","Vietnam","Philippines", "Turkey", "Germany")) %>%  filter(AssetType=="Mine") %>% filter(ActivityStatus=="Production") %>% filter(WorkType %in% c("Open-Pit", "Underground")) %>% group_by(Country, WorkType) %>% tally(sort=TRUE)
+
+
+
+
+
+undersurf$Country <- factor(undersurf$Country, levels=c("United States","Russia","Australia","India","China","South Africa","Ukraine","Canada","Brazil","Mexico","Indonesia","Peru","Chile","Kazakhstan","Zimbabwe","Poland","Vietnam","Philippines", "Turkey", "Germany"))
+
+undersurf$Country <- fct_rev(undersurf$Country)
+
+glimpse(undersurf)
+undersurf
+
+```
+
+
+
+Let' spread to calculate values of mean
+
+
+```{r}
+
+
+spreadundersurf <- undersurf %>% spread(WorkType,n) %>% mutate(totalprodmines = `Open-Pit`+Underground) %>% mutate(OpenPitPercent=`Open-Pit`/totalprodmines) %>% mutate(UndergroundPercent=Underground/totalprodmines)
+spreadundersurf 
+
+
+```
+
+
+Now time to gather to chart. 
+
+
+```{r}
+
+gatherundersurf <- spreadundersurf %>% gather(key=WorkTypeName, value=WorkTypeValue, OpenPitPercent,UndergroundPercent)
+gatherundersurf
+
+```
+
+
+
+
+
+
+Let's plot. 
+
+```{r}
+
+ggplot(gatherundersurf, aes(x=Country, WorkTypeValue, fill=WorkTypeName))+
+  geom_bar(stat="identity")+
+  coord_flip()
+
+```
+
+
+
+
+
+
+
+Let's format to make prettier. 
+
+```{r}
+
+library(scales)
+library(showtext)
+library(extrafont)
+
+ee <- ggplot(gatherundersurf, aes(x=Country, WorkTypeValue, fill=WorkTypeName))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+#  geom_text(aes(label=scales::percent(WorkTypeValue)), family="Montserrat")+
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal(base_size=16, base_family="Montserrat")+
+  labs(title="Underground and Surface Mines Percentage", subtitle="Showing just the top 20 mining countries as of June 2018.",x="", y="", caption="Mining Intelligence", fill="") +
+  theme(plot.title = element_text(size = rel(2), family="Zilla Slab Light"), legend.title=element_blank()) +
+  scale_fill_manual(values=c("#e9820d","#2d70da"), labels = c("Open Pit", "Underground"))
+
+ee
+
+  ggsave("pctsurfaceunderground8.pdf", plot=ee, width=280, height=210, units="mm")
+
+```
+
+
+
+Let's do some analysis. Count worktype for mines. 
+
+```{r}
+
+undervssurf <- joinraw %>% filter(AssetType=="Mine") %>% filter(ActivityStatus=="Production")%>% group_by(WorkType) %>% tally(sort=TRUE)
+undervssurf
+```
+
+
+
+
+
+
+
+```{r}
+
+moreanalysis <- joinraw %>% filter(AssetType=="Mine") %>% filter(ActivityStatus=="Production")%>%filter(WorkType %in% c("Open-Pit", "Underground")) %>% group_by(WorkType) %>% summarize(percentage=mean(WorkType))
+moreanalysis
+```
+
+
+
+
